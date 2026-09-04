@@ -1,4 +1,4 @@
-# Self-Assembly-Guided Flow Matching for BRAID Parameter Generation and Herbal Compatibility Prediction
+# Self-Assembly-Score-Guided Flow Matching for Drug-Pair BRAID Pharmacodynamic Parameter Generation and Herbal Compatibility Discovery
 
 This repository contains the code and data for self-assembly score prediction, Conditional Flow Matching-based BRAID pharmacodynamic parameter generation, and molecular-to-herbal compatibility prediction.
 
