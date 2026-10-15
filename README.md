@@ -72,7 +72,7 @@ The Flow Matching model learns a time-dependent conditional velocity field that 
 The raw self-assembly sigmoid probability, $p$, is not passed directly to the Flow Matching model. The final conditional dataset and inference workflow use the same fixed min--max transformation:
 
 $$
-s=\operatorname{clip}\left(
+s=\mathrm{clip}\left(
 \frac{p-0.0057521141}{0.2347644269-0.0057521141},0,1
 \right).
 $$
