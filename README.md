@@ -73,11 +73,11 @@ The raw self-assembly sigmoid probability, $p$, is not passed directly to the Fl
 
 $$
 s=\mathrm{clip}\left(
-\frac{p-0.0057521141}{0.2347644269-0.0057521141},0,1
+\frac{p-p_{\min}}{p_{\max}-p_{\min}},0,1
 \right).
 $$
 
-The normalized value $s$ is the model condition. The raw probability is retained only as an auditable intermediate quantity.
+Here, $p_{\min}$ and $p_{\max}$ are fixed normalization bounds estimated from the training distribution. The normalized value $s$ is the model condition. The raw probability is retained only as an auditable intermediate quantity.
 
 ---
 
