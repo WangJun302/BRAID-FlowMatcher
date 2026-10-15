@@ -1,410 +1,341 @@
-# Self-Assembly-Score-Guided Flow Matching for Drug-Pair BRAID Pharmacodynamic Parameter Generation and Herbal Compatibility Discovery
+<div align="center">
 
-This repository contains the code and data for self-assembly score prediction, Conditional Flow Matching-based BRAID pharmacodynamic parameter generation, and molecular-to-herbal compatibility prediction.
+# BRAID-FlowMatcher
 
-## 1. Repository Structure
+### Self-Assembly-Guided Conditional Flow Matching for Drug-Pair BRAID Parameter Generation
+
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![RDKit](https://img.shields.io/badge/RDKit-required-138577)](https://www.rdkit.org/)
+![Research](https://img.shields.io/badge/status-research%20prototype-6C5CE7)
+
+**Companion code and data for an interpretable generative framework that maps a molecular pair, cell-line context, and normalized self-assembly condition to a seven-dimensional BRAID pharmacodynamic parameter distribution.**
+
+</div>
+
+---
+
+## Overview
+
+Most drug-combination models predict a single synergy score. BRAID-FlowMatcher instead generates a complete, interpretable pharmacodynamic parameter vector:
+
+$$
+\boldsymbol{\theta}=
+(E_0,E_f,\log_{10}EC_{50,A},\log_{10}EC_{50,B},m_A,m_B,\kappa).
+$$
+
+The framework combines:
+
+- molecular sequence and structural representations;
+- cross-molecular interaction modeling;
+- a continuous, normalized self-assembly score;
+- cell-line context;
+- conditional Flow Matching for repeated parameter generation and uncertainty analysis.
+
+The generated vector can be used to reconstruct a dose-dependent interaction surface rather than reducing the prediction to one scalar endpoint.
+
+![Self-assembly-guided molecular-pair representation and conditional generation framework](docs/assets/model_overview.png)
+
+> **Scope.** The self-assembly score is used as a conditional molecular-pair prior. It is not interpreted as direct evidence of biological causality. The generated surfaces are model predictions and require experimental validation.
+
+---
+
+## At a Glance
+
+| Component | Description |
+|---|---|
+| Primary input | Two molecular SMILES strings, a cell line, and a normalized self-assembly score |
+| Primary output | Seven BRAID pharmacodynamic parameters |
+| Generative model | Conditional Flow Matching |
+| Molecular interaction model | Transformer representations with cross-molecular interaction refinement |
+| Final Flow dataset | 8,763 drug-pair--cell-line records |
+| Coverage | 37 unique drugs, 561 drug pairs, and 19 cell lines |
+| Self-assembly dataset | 1,875 labeled molecular-pair records |
+| Downstream use | Dose-response reconstruction, repeated-sampling uncertainty, and exploratory herb-pair aggregation |
+
+---
+
+## Method
+
+### 1. Molecular-pair representation and self-assembly conditioning
+
+Each molecule is represented using complementary sequence, graph, and physicochemical information. Cross-molecular interaction layers refine the pair representation. A learned gate controls how strongly the continuous self-assembly condition modulates the molecular-pair representation before BRAID parameter generation.
+
+### 2. Conditional Flow Matching
+
+The Flow Matching model learns a time-dependent conditional velocity field that transports a Gaussian prior toward the observed BRAID parameter distribution. During inference, repeated samples produce a parameter distribution and corresponding uncertainty summaries.
+
+![Conditional Flow Matching training and inference workflow](docs/assets/flow_matching.png)
+
+### 3. Self-assembly score normalization
+
+The raw self-assembly sigmoid probability, $p$, is not passed directly to the Flow Matching model. The final conditional dataset and inference workflow use the same fixed min--max transformation:
+
+$$
+s=\operatorname{clip}\left(
+\frac{p-0.0057521141}{0.2347644269-0.0057521141},0,1
+\right).
+$$
+
+The normalized value $s$ is the model condition. The raw probability is retained only as an auditable intermediate quantity.
+
+---
+
+## BRAID Outputs
+
+| Parameter | Interpretation |
+|---|---|
+| $E_0$ | Baseline response |
+| $E_f$ | Asymptotic response |
+| $\log_{10}EC_{50,A}$ | Log-scale half-maximal concentration for molecule A |
+| $\log_{10}EC_{50,B}$ | Log-scale half-maximal concentration for molecule B |
+| $m_A$ | Dose-response slope for molecule A |
+| $m_B$ | Dose-response slope for molecule B |
+| $\kappa$ | BRAID interaction parameter |
+
+Positive or negative values of $\kappa$ indicate the direction of the inferred interaction relative to the BRAID reference. Interpretation should always consider the generated uncertainty and the fitted parameter domain.
+
+---
+
+## Data Included in This Repository
+
+### Flow Matching dataset
+
+`flow_model_train_data.csv` contains 8,763 quality-filtered records derived from reconstructed DrugComb dose matrices.
+
+| Field group | Columns |
+|---|---|
+| Record identifiers | `BlockID`, `Cell Line`, `DrugA`, `DrugB` |
+| Molecular inputs | `SMILES_A`, `SMILES_B` |
+| Self-assembly condition | `score` |
+| BRAID targets | `E0`, `Ef`, `EC50A`, `EC50B`, `logEC50A`, `logEC50B`, `mA`, `mB`, `kappa` |
+| Fit diagnostics | `R2`, `fit_success`, `error` |
+
+![Summary of the final DrugComb-derived BRAID training dataset](docs/assets/training_dataset.png)
+
+### Self-assembly dataset
+
+`self_assembly_data.tsv` contains 1,875 labeled molecular pairs with the following columns:
 
 ```text
-.
-├── flow_model_train_data.csv
-├── flow_model_trans.py
-├── flow_model_use.py
-├── herb_prediction.py
-├── self_assembly_data.pt
-├── self_assembly_data.tsv
-├── self_assembly_models.py
-├── self_assembly_train.py
-└── tsv_pt_data.py
+DRUG_SMILES    EXCIPIENT_SMILES    CLASS
+```
+
+`CLASS` is the binary target used to train the self-assembly predictor. The downstream Flow Matching model uses the predictor's normalized continuous score, not a hard class label.
+
+---
+
+## Repository Layout
+
+```text
+BRAID-FlowMatcher-main/
+├── README.md
+├── flow_model_train_data.csv   # Final conditional Flow Matching table
+├── flow_model_trans.py         # Flow Matching training and evaluation
+├── flow_model_use.py           # Repeated-sampling inference example
+├── self_assembly_data.tsv      # Raw self-assembly training table
+├── tsv_pt_data.py              # TSV-to-PyTorch preprocessing
+├── self_assembly_models.py     # Self-assembly network definition
+├── self_assembly_train.py      # Self-assembly training entry point
+├── herb_prediction.py          # Exploratory molecule-to-herb aggregation
+└── docs/
+    └── assets/                 # README figures
+```
+
+Generated training artifacts are not source files and are therefore shown separately:
+
+```text
+flow_result/
+├── flow_best2.pt
+├── vocab.json
+├── cell2id.json
+├── theta_mean.npy
+└── theta_std.npy
+
+checkpoints/
+└── best_model_epoch*_auc*.pt
 ```
 
 ---
 
-## 2. File Description
-
-### 2.1 Flow Matching Module
-
-#### `flow_model_train_data.csv`
-
-Training data for the Flow Matching model.
-
-The dataset contains the molecular-pair information, cell-line conditions, self-assembly scores, and corresponding BRAID pharmacodynamic parameters used for model training.
-
-This file is used by:
-
-```text
-flow_model_trans.py
-```
-
----
-
-#### `flow_model_trans.py`
-
-Training script for the Conditional Flow Matching model.
-
-The script uses `flow_model_train_data.csv` to train the Flow Matching model.
-
-The model takes molecular-pair information, cell-line information, and the self-assembly score as conditional information and learns to generate the corresponding seven-dimensional BRAID parameter vector:
-
-```text
-E0
-Ef
-logEC50_A
-logEC50_B
-mA
-mB
-κ
-```
-
-After training, the model can be used for molecular-level BRAID parameter prediction.
-
----
-
-#### `flow_model_use.py`
-
-Inference and usage example for the trained Flow Matching model.
-
-This script demonstrates how a specific molecular pair is processed together with:
-
-```text
-Molecular pair
-Cell line
-Self-assembly score
-```
-
-to generate the corresponding BRAID pharmacodynamic parameters.
-
-The script can be used as an example for applying the trained Flow Matching model to new molecular pairs.
-
----
-
-### 2.2 Herbal Compatibility Module
-
-#### `herb_prediction.py`
-
-Script for transferring molecular-level predictions to the herbal medicine level.
-
-The script uses molecular prediction results together with compound–herb relationships to evaluate the compatibility of herbal pairs.
-
-The general process is:
-
-```text
-Molecular pairs
-      ↓
-Molecular-level prediction
-      ↓
-Compound–herb mapping
-      ↓
-Herbal-level aggregation
-      ↓
-Herbal compatibility prediction
-```
-
-The output can be used to rank candidate herbal pairs for further analysis or experimental validation.
-
----
-
-### 2.3 Self-Assembly Prediction Module
-
-#### `self_assembly_data.tsv`
-
-Original tabular training dataset for the self-assembly prediction model.
-
-This file contains the collected molecular self-assembly training data before preprocessing.
-
-It is used as the input of:
-
-```text
-tsv_pt_data.py
-```
-
----
-
-#### `tsv_pt_data.py`
-
-Preprocessing script for the self-assembly training data.
-
-The script converts the original tabular dataset:
-
-```text
-self_assembly_data.tsv
-```
-
-into a processed and vectorized PyTorch dataset:
-
-```text
-self_assembly_data.pt
-```
-
-The generated `.pt` file is then used for training the self-assembly prediction model.
-
----
-
-#### `self_assembly_data.pt`
-
-Processed and vectorized self-assembly training dataset.
-
-This file is generated from:
-
-```text
-self_assembly_data.tsv
-```
-
-using:
-
-```text
-tsv_pt_data.py
-```
-
-It is used directly by:
-
-```text
-self_assembly_train.py
-```
-
-for self-assembly model training.
-
-> `self_assembly_data.pt` is the processed training dataset, not the model architecture.
-
----
-
-#### `self_assembly_models.py`
-
-Model definition for the self-assembly prediction network.
-
-This file contains the neural network architecture used by:
-
-```text
-self_assembly_train.py
-```
-
----
-
-#### `self_assembly_train.py`
-
-Training script for the self-assembly prediction model.
-
-The script loads the processed dataset:
-
-```text
-self_assembly_data.pt
-```
-
-and uses the model architecture defined in:
-
-```text
-self_assembly_models.py
-```
-
-to train the self-assembly prediction model.
-
-After training, the model can be used to predict the self-assembly score of molecular pairs.
-
-The predicted self-assembly score is subsequently used as a condition in the Flow Matching model.
-
----
-
-## 3. Recommended Usage
-
-The complete workflow is executed in the following order.
-
-### Step 1. Preprocess the self-assembly data
-
-Run:
+## Environment
+
+Recommended environment:
+
+- Python 3.10 or 3.11
+- PyTorch 2.x
+- NumPy
+- pandas
+- scikit-learn
+- RDKit
+- tqdm
+
+Example installation:
 
 ```bash
-python tsv_pt_data.py
+python -m venv .venv
 ```
 
-Input:
+Windows PowerShell:
 
-```text
-self_assembly_data.tsv
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install torch numpy pandas scikit-learn rdkit tqdm
 ```
 
-Output:
-
-```text
-self_assembly_data.pt
-```
-
----
-
-### Step 2. Train the self-assembly prediction model
-
-Run:
+Linux or macOS:
 
 ```bash
-python self_assembly_train.py
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install torch numpy pandas scikit-learn rdkit tqdm
 ```
 
-The script uses:
-
-```text
-self_assembly_data.pt
-self_assembly_models.py
-```
-
-to train the self-assembly prediction model.
-
-The trained model produces a self-assembly score for a given molecular pair.
+For GPU execution, install the PyTorch build compatible with the local CUDA runtime.
 
 ---
 
-### Step 3. Train the Flow Matching model
+## Reproduction Workflow
 
-Run:
+### Step 1: preprocess the self-assembly dataset
+
+```bash
+python tsv_pt_data.py \
+  --tsv self_assembly_data.tsv \
+  --out self_assembly_data.pt \
+  --max 0
+```
+
+Expected output:
+
+```text
+self_assembly_data.pt
+```
+
+### Step 2: train the self-assembly predictor
+
+```bash
+python self_assembly_train.py \
+  --processed self_assembly_data.pt \
+  --epochs 65 \
+  --batch_size 8 \
+  --seed 42 \
+  --save_dir checkpoints
+```
+
+The compact code snapshot imports `AssemblyDataset`, `collate_fn`, and training utilities from `dataset.py`, `models.py`, and `utils.py`. These helper modules must be present in the repository root before this training command is run. See [Release Completeness](#release-completeness).
+
+### Step 3: train the conditional Flow Matching model
+
+Before training, ensure that the dataset configuration in `flow_model_trans.py` points to the included table:
+
+```python
+CSV_PATH = "flow_model_train_data.csv"
+SAVE_DIR = "flow_result"
+```
+
+Then run:
 
 ```bash
 python flow_model_trans.py
 ```
 
-The script uses:
+The training script writes the vocabulary, cell-line mapping, target-scaling statistics, training history, evaluation tables, and the best checkpoint into `flow_result/`.
 
-```text
-flow_model_train_data.csv
+### Step 4: run repeated-sampling inference
+
+`flow_model_use.py` demonstrates inference for a single molecular pair. Confirm that its model-loading block points to the generated checkpoint:
+
+```python
+stats_path = "flow_result"
+weight_name = "flow_best2.pt"
 ```
 
-as the training dataset.
-
-The trained Flow Matching model learns to generate BRAID pharmacodynamic parameters conditioned on molecular-pair information, cell-line information, and self-assembly score.
-
----
-
-### Step 4. Perform molecular-level inference
-
-Run:
+Then run:
 
 ```bash
 python flow_model_use.py
 ```
 
-This script provides an example of using the trained Flow Matching model to generate BRAID parameters for a specific molecular pair.
-
-The generated parameters are:
+The example writes individual generated samples to:
 
 ```text
-E0
-Ef
-logEC50_A
-logEC50_B
-mA
-mB
-κ
+single_prediction_samples.csv
 ```
 
----
+### Step 5: optional herb-level application
 
-### Step 5. Perform herbal compatibility prediction
-
-Run:
+`herb_prediction.py` performs exploratory cross-herb molecular-pair scoring and aggregation. This is a downstream application rather than a supervised target of the BRAID generator.
 
 ```bash
-python herb_prediction.py
+python herb_prediction.py \
+  --input <compound_to_herb_table.csv> \
+  --ckpt <self_assembly_checkpoint.pt> \
+  --out herb_molecule_pairs_predictions.csv \
+  --device cuda
 ```
 
-This script transfers molecular-level predictions to the herbal level and generates herbal compatibility predictions and candidate rankings.
+Use `--device cpu` when CUDA is unavailable.
 
 ---
 
-## 4. File Dependency
+## Evaluation Snapshot
 
-The relationship between the files can be summarized as follows:
+The model is evaluated parameter by parameter rather than only through a derived synergy label. The manuscript reports comparisons in the physical, logarithmic, and standardized target spaces, together with residual diagnostics and repeated-sampling analyses.
 
-```text
-                    Self-Assembly Module
-                            
-self_assembly_data.tsv
-          │
-          ▼
-   tsv_pt_data.py
-          │
-          ▼
-self_assembly_data.pt
-          │
-          ├───────────────┐
-          ▼               │
-self_assembly_train.py    │
-          │               │
-          ▼               │
-self_assembly_models.py   │
-          │               │
-          ▼               │
- Self-Assembly Model      │
-          │               │
-          ▼               │
- Self-Assembly Score      │
-          │               │
-          └───────┬───────┘
-                  │
-                  ▼
-        Flow Matching Module
+![Parameter-wise performance and residual diagnostics](docs/assets/parameter_performance.png)
 
-flow_model_train_data.csv
-          │
-          ▼
-flow_model_trans.py
-          │
-          ▼
- Conditional Flow Matching
-          │
-          ▼
- BRAID Parameters
-          │
-          ▼
-flow_model_use.py
-          │
-          ▼
-Molecular-level Prediction
-          │
-          ▼
-   herb_prediction.py
-          │
-          ▼
-Herbal Compatibility Prediction
-```
+The figure is a descriptive snapshot of the manuscript evaluation. Exact values should be read from the corresponding result tables produced by the training script rather than inferred from the rendered image.
 
 ---
 
-## 5. Summary of Each File
+## BRAID Studio Research Interface
 
-| File | Type | Main Function |
-|---|---|---|
-| `flow_model_train_data.csv` | Dataset | Training data for Flow Matching |
-| `flow_model_trans.py` | Training | Train the Conditional Flow Matching model |
-| `flow_model_use.py` | Inference | Generate BRAID parameters for a molecular pair |
-| `herb_prediction.py` | Application | Map molecular predictions to herbal compatibility |
-| `self_assembly_data.tsv` | Dataset | Original self-assembly training data |
-| `tsv_pt_data.py` | Preprocessing | Convert `.tsv` data into vectorized `.pt` data |
-| `self_assembly_data.pt` | Processed Dataset | Vectorized self-assembly training data |
-| `self_assembly_models.py` | Model | Self-assembly model architecture |
-| `self_assembly_train.py` | Training | Train the self-assembly prediction model |
+The trained self-assembly and Flow Matching models were also integrated into a local single-page research prototype. The interface accepts two SMILES strings and a cell-line condition, applies the same self-assembly normalization used by the final conditional dataset, performs repeated generation, and visualizes the reconstructed interaction landscape.
+
+![BRAID Studio local research interface](docs/assets/braid_studio_interface.png)
+
+The interface is a research prototype. It is not a clinical decision-support system, and its outputs do not replace experimental validation.
 
 ---
 
-## 6. Overall Workflow
+## Release Completeness
 
-The complete computational workflow is:
+This repository contains the principal publication scripts and the two tabular datasets. A fully executable archival release should additionally contain or link to:
 
-```text
-Self-Assembly Training Data
-            ↓
-    Data Preprocessing
-            ↓
- Self-Assembly Prediction
-            ↓
-   Self-Assembly Score
-            ↓
- Conditional Flow Matching
-            ↓
- BRAID Parameter Generation
-            ↓
- Molecular-Level Prediction
-            ↓
- Molecular-to-Herbal Mapping
-            ↓
-Herbal Compatibility Prediction
-            ↓
- Candidate Herbal Pairs
-```
+- `dataset.py`, `models.py`, and `utils.py`, which are imported by `self_assembly_train.py`;
+- the trained self-assembly checkpoint, if pretrained inference is intended;
+- the `flow_result/` checkpoint and metadata files, if inference without retraining is intended;
+- the compound-to-herb mapping table required by `herb_prediction.py`;
+- a pinned dependency file and software-version record.
 
-The repository is organized so that the self-assembly prediction, Flow Matching model training, molecular-level inference, and herbal compatibility prediction can be reproduced as separate steps.
+These items are intentionally stated here so that reviewers can distinguish source code, generated artifacts, and external application data. Do not treat a missing generated checkpoint as part of the training dataset.
+
+---
+
+## Reproducibility Notes
+
+- Use a fixed random seed when comparing repeated-sampling configurations.
+- Keep the same SMILES tokenizer, vocabulary, cell-line mapping, and target normalization statistics between training and inference.
+- Use the normalized self-assembly score as the Flow condition; do not substitute the raw sigmoid probability.
+- Preserve the order of the seven target parameters.
+- Report the number of ODE integration steps and generated samples with each inference experiment.
+- Predictions for molecules or biological contexts outside the development distribution require additional caution.
+
+---
+
+## Citation
+
+If this repository supports your work, please cite the associated manuscript:
+
+> *Self-Assembly-Guided Conditional Flow Matching for Drug-Pair BRAID Pharmacodynamic Parameter Generation.*
+
+Complete journal, author, DOI, and BibTeX information should be added here when the manuscript record becomes publicly available.
+
+---
+
+## License and Intended Use
+
+No software license is included in this repository snapshot. Contact the authors before redistribution or reuse beyond manuscript review. The code and generated outputs are provided for research purposes only.
+
